@@ -1,7 +1,7 @@
 {
   "functions": {
     "api/analyze.js": {
-      "runtime": "nodejs16.x"
+      "runtime": "@vercel/node@1.12.0"
     }
   }
 }
