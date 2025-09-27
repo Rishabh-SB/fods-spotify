@@ -2,6 +2,7 @@ let jsonData = [];
 const batchSize = 5000;
 const MAX_CONCURRENT = 2; // Number of parallel batch uploads supported
 let aggregatedResults = null;
+let startTime = null;
 
 // Helper function to update progress bar and text
 function updateProgress(entriesProcessed, totalEntries) {
@@ -62,6 +63,8 @@ async function analyze() {
 
   let completed = 0;
   // Process batches in groups of MAX_CONCURRENT
+  startTime = Date.now();
+
   for (let i = 0; i < batches.length; i += MAX_CONCURRENT) {
     const currentBatches = batches.slice(i, i + MAX_CONCURRENT);
     const promises = currentBatches.map((batch, idx) =>
@@ -87,6 +90,11 @@ async function analyze() {
 
   document.getElementById("status").textContent = "Analysis complete.";
   displayResults(aggregatedResults);
+  const elapsedMs = Date.now() - startTime;
+  const elapsedSeconds = (elapsedMs / 1000).toFixed(2);
+
+  const resDiv = document.getElementById("results");
+  resDiv.innerHTML += `<p><b>Total Analysis Time:</b> ${elapsedSeconds} seconds</p>`;
   drawChart(aggregatedResults.monthly_new_tracks);
 }
 
