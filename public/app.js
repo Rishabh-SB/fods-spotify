@@ -49,11 +49,11 @@ function startLiveTimer() {
   if (timerInterval) clearInterval(timerInterval);
   timerInterval = setInterval(() => {
     const elapsedMs = Date.now() - startTime;
-    const elapsedSeconds = (elapsedMs / 1000).toFixed(1);
+    const elapsedSeconds = (elapsedMs / 1000).toFixed(2);
     document.getElementById(
       "timerText"
     ).textContent = `Time elapsed: ${elapsedSeconds} seconds`;
-  }, 1000);
+  }, 10);
 }
 
 function stopLiveTimer() {
