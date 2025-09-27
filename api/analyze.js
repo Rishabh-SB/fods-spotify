@@ -29,7 +29,6 @@ module.exports = async (req, res) => {
   }
 
   try {
-    // Filter valid entries
     const filtered = data.filter(
       (e) =>
         e.master_metadata_track_name &&
@@ -45,115 +44,43 @@ module.exports = async (req, res) => {
       return;
     }
 
-    // Parsing and preparing
+    // Prepare unique tracks set and counts
+    const uniqueTracksSet = new Set();
+    const topTracksCounts = {};
+    const topArtistsCounts = {};
+    let totalMsPlayed = 0;
+    let totalSkipped = 0;
+    let totalPlays = 0;
+    let repeatTracks = 0;
+
     filtered.forEach((e) => {
-      e.tsDate = new Date(e.ts);
-      e.skipped = typeof e.skipped === "boolean" ? e.skipped : false;
+      const track = e.master_metadata_track_name;
+      uniqueTracksSet.add(track);
+
+      topTracksCounts[track] = (topTracksCounts[track] || 0) + 1;
+      topArtistsCounts[e.master_metadata_album_artist_name] =
+        (topArtistsCounts[e.master_metadata_album_artist_name] || 0) + 1;
+
+      totalMsPlayed += e.ms_played;
+      totalSkipped += e.skipped ? 1 : 0;
+      totalPlays++;
     });
 
-    // Helper functions
-    const countBy = (array, keyFn) => {
-      const counts = {};
-      array.forEach((item) => {
-        const key = keyFn(item);
-        counts[key] = (counts[key] || 0) + 1;
-      });
-      return counts;
-    };
-    const sortDesc = (obj) => Object.entries(obj).sort((a, b) => b[1] - a[1]);
+    repeatTracks = totalPlays - uniqueTracksSet.size;
 
-    // Wrapped summary
-    const topTracksCount = countBy(
-      filtered,
-      (e) => e.master_metadata_track_name
-    );
-    const topArtistsCount = countBy(
-      filtered,
-      (e) => e.master_metadata_album_artist_name
-    );
+    // For skipByPlatform etc. you can add raw counts similarly if needed
 
-    const topTracks = sortDesc(topTracksCount).slice(0, 10);
-    const topArtists = sortDesc(topArtistsCount).slice(0, 10);
-
-    const totalMsPlayed = filtered.reduce((sum, e) => sum + e.ms_played, 0);
-    const totalHours = totalMsPlayed / (1000 * 60 * 60);
-
-    // Skip analysis
-    const skipCount = filtered.reduce(
-      (count, e) => count + (e.skipped ? 1 : 0),
-      0
-    );
-    const skipRate = filtered.length > 0 ? skipCount / filtered.length : 0;
-
-    const skipByPlatformCounts = {};
-    filtered.forEach((e) => {
-      if (e.platform) {
-        if (!skipByPlatformCounts[e.platform]) {
-          skipByPlatformCounts[e.platform] = { skipped: 0, total: 0 };
-        }
-        skipByPlatformCounts[e.platform].skipped += e.skipped ? 1 : 0;
-        skipByPlatformCounts[e.platform].total += 1;
-      }
-    });
-    const skipByPlatform = {};
-    Object.keys(skipByPlatformCounts).forEach((platform) => {
-      const vals = skipByPlatformCounts[platform];
-      skipByPlatform[platform] = vals.total ? vals.skipped / vals.total : 0;
-    });
-
-    const skipByArtistCounts = {};
-    filtered.forEach((e) => {
-      const artist = e.master_metadata_album_artist_name;
-      if (artist) {
-        if (!skipByArtistCounts[artist]) {
-          skipByArtistCounts[artist] = { skipped: 0, total: 0 };
-        }
-        skipByArtistCounts[artist].skipped += e.skipped ? 1 : 0;
-        skipByArtistCounts[artist].total += 1;
-      }
-    });
-    const skipByArtistArray = Object.entries(skipByArtistCounts).map(
-      ([artist, vals]) => ({
-        artist,
-        skipRate: vals.total ? vals.skipped / vals.total : 0,
-      })
-    );
-    const skipByArtistSorted = skipByArtistArray
-      .sort((a, b) => b.skipRate - a.skipRate)
-      .slice(0, 10);
-    const skipByArtist = {};
-    skipByArtistSorted.forEach((item) => {
-      skipByArtist[item.artist] = item.skipRate;
-    });
-
-    // Repeat and exploration
-    const trackCounts = countBy(filtered, (e) => e.master_metadata_track_name);
-    const repeats = Object.values(trackCounts).filter((c) => c > 1).length;
-    const totalTracks = Object.values(trackCounts).length;
-    const explorationRatio = totalTracks ? 1 - repeats / totalTracks : 0;
-
-    // Monthly new tracks
-    const monthlyNewTrackSets = {};
-    filtered.forEach((e) => {
-      const month = e.ts.substring(0, 7);
-      if (!monthlyNewTrackSets[month]) monthlyNewTrackSets[month] = new Set();
-      monthlyNewTrackSets[month].add(e.master_metadata_track_name);
-    });
-    const monthlyNewTracks = {};
-    Object.entries(monthlyNewTrackSets).forEach(([month, set]) => {
-      monthlyNewTracks[month] = set.size;
-    });
-
+    // Return all raw data (no pre-computed averages/ratios)
     res.status(200).json({
-      top_tracks: Object.fromEntries(topTracks),
-      top_artists: Object.fromEntries(topArtists),
-      total_hours: totalHours,
-      skip_rate: skipRate,
-      skips_platform: skipByPlatform,
-      skips_artist: skipByArtist,
-      repeat_tracks: repeats,
-      exploration_ratio: explorationRatio,
-      monthly_new_tracks: monthlyNewTracks,
+      top_tracks_counts: topTracksCounts,
+      top_artists_counts: topArtistsCounts,
+      total_ms_played: totalMsPlayed,
+      total_skipped: totalSkipped,
+      total_plays: totalPlays,
+      repeat_tracks: repeatTracks,
+      unique_tracks: [...uniqueTracksSet],
+      // If you want skip by platform/artist raw stats include them here
+      monthly_new_tracks: {}, // optional, if required
     });
   } catch (err) {
     res

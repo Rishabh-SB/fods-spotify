@@ -1,11 +1,10 @@
 let jsonData = [];
 const batchSize = 5000;
-const MAX_CONCURRENT = 4; // Number of parallel batch uploads supported
+const MAX_CONCURRENT = 2;
 let aggregatedResults = null;
 let timerInterval = null;
 let startTime = null;
 
-// Helper function to update progress bar and batch progress text
 function updateProgress(entriesProcessed, totalEntries) {
   const percentage = (entriesProcessed / totalEntries) * 100;
   document.getElementById("progressBar").style.width = percentage + "%";
@@ -16,7 +15,6 @@ function updateProgress(entriesProcessed, totalEntries) {
   )}%)`;
 }
 
-// File input event listener: parse file(s)
 document.getElementById("fileInput").addEventListener("change", (e) => {
   const files = e.target.files;
   let loadedCount = 0;
@@ -46,7 +44,6 @@ document.getElementById("fileInput").addEventListener("change", (e) => {
   });
 });
 
-// Timer functions for live update
 function startLiveTimer() {
   startTime = Date.now();
   if (timerInterval) clearInterval(timerInterval);
@@ -72,7 +69,6 @@ async function analyze() {
     return;
   }
   document.getElementById("status").textContent = "Analyzing in parallel...";
-
   updateProgress(0, jsonData.length);
   startLiveTimer();
 
@@ -108,176 +104,94 @@ async function analyze() {
   stopLiveTimer();
   document.getElementById("status").textContent = "Analysis complete.";
 
-  // Show total elapsed time
+  // Compute final metrics from raw aggregated data
+  const total_hours = aggregatedResults.total_ms_played / (1000 * 60 * 60);
+  const skip_rate = aggregatedResults.total_plays
+    ? aggregatedResults.total_skipped / aggregatedResults.total_plays
+    : 0;
+  const repeat_tracks = aggregatedResults.repeat_tracks;
+  const exploration_ratio = aggregatedResults.total_plays
+    ? aggregatedResults.unique_tracks.size / aggregatedResults.total_plays
+    : 0;
+
+  // Sort top tracks and artists
+  const top_tracks_sorted = Object.entries(aggregatedResults.top_tracks_counts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10);
+
+  const top_artists_sorted = Object.entries(
+    aggregatedResults.top_artists_counts
+  )
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10);
+
+  displayResults({
+    top_tracks: Object.fromEntries(top_tracks_sorted),
+    top_artists: Object.fromEntries(top_artists_sorted),
+    total_hours,
+    skip_rate,
+    repeat_tracks,
+    exploration_ratio,
+  });
+
   const elapsedMs = Date.now() - startTime;
   const elapsedSeconds = (elapsedMs / 1000).toFixed(1);
   document.getElementById(
     "timerText"
   ).textContent = `Total time: ${elapsedSeconds} seconds`;
-
-  displayResults(aggregatedResults);
-  drawChart(aggregatedResults.monthly_new_tracks);
 }
-
-// Display the monthly new tracks chart
-function drawChart(monthlyNewTracks) {
-  const ctx = document.getElementById("monthlyChart").getContext("2d");
-
-  // Destroy previous chart instance if exists
-  if (window.monthlyChartInstance) {
-    window.monthlyChartInstance.destroy();
-  }
-
-  const labels = Object.keys(monthlyNewTracks).sort();
-  const data = labels.map((label) => monthlyNewTracks[label]);
-
-  window.monthlyChartInstance = new Chart(ctx, {
-    type: "bar",
-    data: {
-      labels: labels,
-      datasets: [
-        {
-          label: "New Tracks per Month",
-          data: data,
-          backgroundColor: "rgba(30, 215, 96, 0.7)",
-          borderColor: "rgba(30, 215, 96, 1)",
-          borderWidth: 1,
-        },
-      ],
-    },
-    options: {
-      scales: {
-        x: { title: { display: true, text: "Month" } },
-        y: { beginAtZero: true, title: { display: true, text: "New Tracks" } },
-      },
-    },
-  });
-}
-
-// Supporting aggregation functions unchanged
-
-// All your other helper functions remain unchanged (initializeEmptyResults, mergeResults, etc.)
 
 function initializeEmptyResults() {
   return {
-    top_tracks: {},
-
-    top_artists: {},
-
-    total_hours: 0,
-
-    skip_rate: 0,
-
-    skips_platform: {},
-
-    skips_artist: {},
-
+    top_tracks_counts: {},
+    top_artists_counts: {},
+    total_ms_played: 0,
+    total_skipped: 0,
+    total_plays: 0,
     repeat_tracks: 0,
-
-    exploration_ratio: 0,
-
-    monthly_new_tracks: {},
+    unique_tracks: new Set(),
   };
 }
 
-function mergeResults(agg, batch) {
-  agg.top_tracks = mergeCountObjects(agg.top_tracks, batch.top_tracks);
-
-  agg.top_artists = mergeCountObjects(agg.top_artists, batch.top_artists);
-
-  agg.total_hours += batch.total_hours;
-
-  agg.skip_rate = weightedAverage(
-    agg.skip_rate,
-
-    agg.total_hours,
-
-    batch.skip_rate,
-
-    batch.total_hours
-  );
-
-  agg.skips_platform = mergeWeightedAverages(
-    agg.skips_platform,
-
-    batch.skips_platform
-  );
-
-  agg.skips_artist = mergeWeightedAverages(
-    agg.skips_artist,
-
-    batch.skips_artist
-  );
-
-  agg.repeat_tracks += batch.repeat_tracks;
-
-  agg.exploration_ratio = (agg.exploration_ratio + batch.exploration_ratio) / 2;
-
-  agg.monthly_new_tracks = mergeCountObjects(
-    agg.monthly_new_tracks,
-
-    batch.monthly_new_tracks
-  );
-
-  return agg;
-}
-
-function mergeCountObjects(a, b) {
-  const result = { ...a };
-
-  for (const [key, value] of Object.entries(b)) {
-    result[key] = (result[key] || 0) + value;
+function mergeResults(acc, batch) {
+  for (const [track, count] of Object.entries(batch.top_tracks_counts)) {
+    acc.top_tracks_counts[track] = (acc.top_tracks_counts[track] || 0) + count;
   }
 
-  return result;
+  for (const [artist, count] of Object.entries(batch.top_artists_counts)) {
+    acc.top_artists_counts[artist] =
+      (acc.top_artists_counts[artist] || 0) + count;
+  }
+
+  acc.total_ms_played += batch.total_ms_played || 0;
+  acc.total_skipped += batch.total_skipped || 0;
+  acc.total_plays += batch.total_plays || 0;
+  acc.repeat_tracks += batch.repeat_tracks || 0;
+
+  if (batch.unique_tracks && Array.isArray(batch.unique_tracks)) {
+    batch.unique_tracks.forEach((t) => acc.unique_tracks.add(t));
+  }
+
+  return acc;
 }
 
-function weightedAverage(avg1, weight1, avg2, weight2) {
-  if (weight1 + weight2 === 0) return 0;
-
-  return (avg1 * weight1 + avg2 * weight2) / (weight1 + weight2);
-}
-
-function mergeWeightedAverages(a, b) {
-  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
-
-  const result = {};
-
-  keys.forEach((key) => {
-    const v1 = a[key] || 0;
-
-    const v2 = b[key] || 0;
-
-    result[key] = (v1 + v2) / ((v1 > 0 ? 1 : 0) + (v2 > 0 ? 1 : 0) || 1);
-  });
-
-  return result;
-}
-
+// Your existing displayResults function to render final summary
 function displayResults(data) {
   const resDiv = document.getElementById("results");
   const sortEntries = (obj) => Object.entries(obj).sort((a, b) => b[1] - a[1]);
 
-  // Top Artist (first from sorted list)
   const topArtistEntry = sortEntries(data.top_artists)[0];
-  const topArtistLine = topArtistEntry
-    ? `<p><b>Top Artist:</b> ${topArtistEntry[0]} (${topArtistEntry[1].toFixed(
-        2
-      )} plays)</p>`
-    : "<p><b>Top Artist:</b> None</p>";
+  const topTracksList = sortEntries(data.top_tracks).slice(0, 10);
 
-  // Top 10 Tracks
-  const topTracksSorted = sortEntries(data.top_tracks).slice(0, 10);
-  let topTracksHtml = "<b>Top Tracks:</b><ul>";
-  topTracksSorted.forEach(([track, count]) => {
-    topTracksHtml += `<li>${track}: ${count.toFixed(2)}</li>`;
+  let html = `<p><b>Top Artist:</b> ${
+    topArtistEntry ? topArtistEntry[0] : "None"
+  } (${topArtistEntry ? topArtistEntry[1].toFixed(2) : "0"} plays)</p>`;
+  html += `<b>Top Tracks:</b><ul>`;
+  topTracksList.forEach(([track, count]) => {
+    html += `<li>${track}: ${count.toFixed(2)}</li>`;
   });
-  topTracksHtml += "</ul>";
+  html += `</ul>`;
 
-  let html = "";
-
-  html += topArtistLine;
-  html += topTracksHtml;
   html += `<p><b>Total Listening Hours:</b> ${data.total_hours.toFixed(2)}</p>`;
   html += `<p><b>Skip Rate:</b> ${(data.skip_rate * 100).toFixed(2)}%</p>`;
   html += `<p><b>Repeat Tracks:</b> ${data.repeat_tracks}</p>`;
