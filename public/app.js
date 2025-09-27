@@ -5,7 +5,7 @@ let aggregatedResults = null;
 let timerInterval = null;
 let startTime = null;
 
-// Helper function to update progress bar and text
+// Helper function to update progress bar and batch progress text
 function updateProgress(entriesProcessed, totalEntries) {
   const percentage = (entriesProcessed / totalEntries) * 100;
   document.getElementById("progressBar").style.width = percentage + "%";
@@ -16,7 +16,7 @@ function updateProgress(entriesProcessed, totalEntries) {
   )}%)`;
 }
 
-// File input event listener: parse file(s) and load JSON data
+// File input parser event listener
 document.getElementById("fileInput").addEventListener("change", (e) => {
   const files = e.target.files;
   let loadedCount = 0;
@@ -46,6 +46,7 @@ document.getElementById("fileInput").addEventListener("change", (e) => {
   });
 });
 
+// Timer functions
 function startLiveTimer() {
   startTime = Date.now();
   if (timerInterval) clearInterval(timerInterval);
@@ -65,6 +66,7 @@ function stopLiveTimer() {
   }
 }
 
+// Main analyze function
 async function analyze() {
   if (jsonData.length === 0) {
     alert("No data loaded!");
@@ -72,7 +74,6 @@ async function analyze() {
   }
   document.getElementById("status").textContent = "Analyzing in parallel...";
 
-  // Initialize progress bar at zero and start timer
   updateProgress(0, jsonData.length);
   startLiveTimer();
 
@@ -83,7 +84,6 @@ async function analyze() {
   }
 
   let completed = 0;
-  // Process batches in groups of MAX_CONCURRENT
   for (let i = 0; i < batches.length; i += MAX_CONCURRENT) {
     const currentBatches = batches.slice(i, i + MAX_CONCURRENT);
     const promises = currentBatches.map((batch, idx) =>
@@ -107,20 +107,21 @@ async function analyze() {
   }
 
   stopLiveTimer();
-
   document.getElementById("status").textContent = "Analysis complete.";
 
-  // Show final total time
+  // Show final total time right here
   const elapsedMs = Date.now() - startTime;
   const elapsedSeconds = (elapsedMs / 1000).toFixed(1);
   document.getElementById(
     "timerText"
   ).textContent = `Total time: ${elapsedSeconds} seconds`;
 
+  // Display results only here, in dedicated results element
   displayResults(aggregatedResults);
   drawChart(aggregatedResults.monthly_new_tracks);
 }
 
+// Supporting aggregation functions unchanged
 function initializeEmptyResults() {
   return {
     top_tracks: {},
@@ -136,22 +137,15 @@ function initializeEmptyResults() {
 }
 
 function mergeResults(agg, batch) {
-  // Merge top_tracks and top_artists counts
   agg.top_tracks = mergeCountObjects(agg.top_tracks, batch.top_tracks);
   agg.top_artists = mergeCountObjects(agg.top_artists, batch.top_artists);
-
-  // Sum total hours
   agg.total_hours += batch.total_hours;
-
-  // Weighted average skip rate
   agg.skip_rate = weightedAverage(
     agg.skip_rate,
     agg.total_hours,
     batch.skip_rate,
     batch.total_hours
   );
-
-  // Merge skips_platform and skips_artist (averaged weighted by total_hours per platform/artist)
   agg.skips_platform = mergeWeightedAverages(
     agg.skips_platform,
     batch.skips_platform
@@ -160,17 +154,12 @@ function mergeResults(agg, batch) {
     agg.skips_artist,
     batch.skips_artist
   );
-
-  // For repeat_tracks and exploration_ratio, tricky to merge without all data, so just sum repeats (approximation)
   agg.repeat_tracks += batch.repeat_tracks;
   agg.exploration_ratio = (agg.exploration_ratio + batch.exploration_ratio) / 2;
-
-  // Merge monthly new tracks counts (sum)
   agg.monthly_new_tracks = mergeCountObjects(
     agg.monthly_new_tracks,
     batch.monthly_new_tracks
   );
-
   return agg;
 }
 
@@ -188,7 +177,6 @@ function weightedAverage(avg1, weight1, avg2, weight2) {
 }
 
 function mergeWeightedAverages(a, b) {
-  // Since we don't have counts per keys, just average the values (approximation)
   const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
   const result = {};
   keys.forEach((key) => {
@@ -201,7 +189,6 @@ function mergeWeightedAverages(a, b) {
 
 function displayResults(data) {
   const resDiv = document.getElementById("results");
-  // Convert top_tracks and top_artists to sorted arrays for display
   const sortEntries = (obj) =>
     Object.entries(obj)
       .sort((a, b) => b[1] - a[1])
