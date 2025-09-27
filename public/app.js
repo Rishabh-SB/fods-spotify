@@ -256,41 +256,34 @@ function mergeWeightedAverages(a, b) {
 
 function displayResults(data) {
   const resDiv = document.getElementById("results");
+  const sortEntries = (obj) => Object.entries(obj).sort((a, b) => b[1] - a[1]);
 
-  const sortEntries = (obj) =>
-    Object.entries(obj)
+  // Top Artist (first from sorted list)
+  const topArtistEntry = sortEntries(data.top_artists)[0];
+  const topArtistLine = topArtistEntry
+    ? `<p><b>Top Artist:</b> ${topArtistEntry[0]} (${topArtistEntry[1].toFixed(
+        2
+      )} plays)</p>`
+    : "<p><b>Top Artist:</b> None</p>";
 
-      .sort((a, b) => b[1] - a[1])
-
-      .slice(0, 10);
-
-  const topTracksSorted = sortEntries(data.top_tracks);
-
-  const topArtistsSorted = sortEntries(data.top_artists);
-
-  let html = "<h3>Top Tracks</h3><ul>";
-
+  // Top 10 Tracks
+  const topTracksSorted = sortEntries(data.top_tracks).slice(0, 10);
+  let topTracksHtml = "<b>Top Tracks:</b><ul>";
   topTracksSorted.forEach(([track, count]) => {
-    html += `<li>${track}: ${count.toFixed(2)}</li>`;
+    topTracksHtml += `<li>${track}: ${count.toFixed(2)}</li>`;
   });
+  topTracksHtml += "</ul>";
 
-  html += "</ul>";
+  let html = "";
 
-  html += "<h3>Top Artists</h3><ul>";
-
-  topArtistsSorted.forEach(([artist, count]) => {
-    html += `<li>${artist}: ${count.toFixed(2)}</li>`;
-  });
-
-  html += "</ul>";
-
-  html += `<h3>Total Listening Hours</h3><p>${data.total_hours.toFixed(2)}</p>`;
-
-  html += `<h3>Skip Rate</h3><p>${(data.skip_rate * 100).toFixed(2)}%</p>`;
-
-  html += `<h3>Repeat Tracks</h3><p>${data.repeat_tracks}</p>`;
-
-  html += `<h3>Exploration Ratio</h3><p>${(
+  html += topArtistLine;
+  html += topTracksHtml;
+  html += `<p><b>Total Listening Hours:</b> ${data.total_hours.toFixed(2)}</p>`;
+  html += `<p><b>Skip Rate:</b> ${(data.skip_rate * 100).toFixed(2)}%</p>`;
+  html += `<p><b>Repeat Tracks:</b> ${data.repeat_tracks}</p>`;
+  html += `<p><b>Exploration Ratio:</b> ${(
     data.exploration_ratio * 100
   ).toFixed(2)}%</p>`;
+
+  resDiv.innerHTML = html;
 }
