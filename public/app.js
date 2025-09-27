@@ -2,6 +2,7 @@ let jsonData = [];
 const batchSize = 5000;
 const MAX_CONCURRENT = 2; // Number of parallel batch uploads supported
 let aggregatedResults = null;
+let timerInterval = null;
 let startTime = null;
 
 // Helper function to update progress bar and text
@@ -45,6 +46,25 @@ document.getElementById("fileInput").addEventListener("change", (e) => {
   });
 });
 
+function startLiveTimer() {
+  startTime = Date.now();
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    const elapsedMs = Date.now() - startTime;
+    const elapsedSeconds = (elapsedMs / 1000).toFixed(1);
+    document.getElementById(
+      "progressText"
+    ).textContent = `Time elapsed: ${elapsedSeconds} seconds`;
+  }, 1000);
+}
+
+function stopLiveTimer() {
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+}
+
 async function analyze() {
   if (jsonData.length === 0) {
     alert("No data loaded!");
@@ -54,6 +74,7 @@ async function analyze() {
 
   // Initialize progress bar at zero
   updateProgress(0, jsonData.length);
+  startLiveTimer();
 
   aggregatedResults = initializeEmptyResults();
   const batches = [];
@@ -63,7 +84,6 @@ async function analyze() {
 
   let completed = 0;
   // Process batches in groups of MAX_CONCURRENT
-  startTime = Date.now();
 
   for (let i = 0; i < batches.length; i += MAX_CONCURRENT) {
     const currentBatches = batches.slice(i, i + MAX_CONCURRENT);
@@ -90,11 +110,17 @@ async function analyze() {
 
   document.getElementById("status").textContent = "Analysis complete.";
   displayResults(aggregatedResults);
+
+  stopLiveTimer();
+
+  // Show final total
   const elapsedMs = Date.now() - startTime;
-  const elapsedSeconds = (elapsedMs / 1000).toFixed(2);
+  const elapsedSeconds = (elapsedMs / 1000).toFixed(1);
+  document.getElementById(
+    "progressText"
+  ).textContent = `Total time: ${elapsedSeconds} seconds`;
 
   const resDiv = document.getElementById("results");
-  resDiv.innerHTML += `<p><b>Total Analysis Time:</b> ${elapsedSeconds} seconds</p>`;
   drawChart(aggregatedResults.monthly_new_tracks);
 }
 
