@@ -1,6 +1,6 @@
 let jsonData = [];
 const batchSize = 1000;
-const MAX_CONCURRENT = 4; // Adjust up or down if needed
+const MAX_CONCURRENT = 2; // Adjust up or down if needed
 let aggregatedResults = null;
 
 document.getElementById("fileInput").addEventListener("change", (e) => {
