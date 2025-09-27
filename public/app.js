@@ -1,6 +1,6 @@
 let jsonData = [];
 const batchSize = 5000;
-const MAX_CONCURRENT = 6;
+const MAX_CONCURRENT = 10;
 let aggregatedResults = null;
 let timerInterval = null;
 let startTime = null;
