@@ -16,7 +16,7 @@ function updateProgress(entriesProcessed, totalEntries) {
   )}%)`;
 }
 
-// File input parser event listener
+// File input event listener: parse file(s)
 document.getElementById("fileInput").addEventListener("change", (e) => {
   const files = e.target.files;
   let loadedCount = 0;
@@ -46,7 +46,7 @@ document.getElementById("fileInput").addEventListener("change", (e) => {
   });
 });
 
-// Timer functions
+// Timer functions for live update
 function startLiveTimer() {
   startTime = Date.now();
   if (timerInterval) clearInterval(timerInterval);
@@ -66,7 +66,6 @@ function stopLiveTimer() {
   }
 }
 
-// Main analyze function
 async function analyze() {
   if (jsonData.length === 0) {
     alert("No data loaded!");
@@ -109,109 +108,188 @@ async function analyze() {
   stopLiveTimer();
   document.getElementById("status").textContent = "Analysis complete.";
 
-  // Show final total time right here
+  // Show total elapsed time
   const elapsedMs = Date.now() - startTime;
   const elapsedSeconds = (elapsedMs / 1000).toFixed(1);
   document.getElementById(
     "timerText"
   ).textContent = `Total time: ${elapsedSeconds} seconds`;
 
-  // Display results only here, in dedicated results element
   displayResults(aggregatedResults);
   drawChart(aggregatedResults.monthly_new_tracks);
 }
 
+// Display the monthly new tracks chart
+function drawChart(monthlyNewTracks) {
+  const ctx = document.getElementById("monthlyChart").getContext("2d");
+
+  // Destroy previous chart instance if exists
+  if (window.monthlyChartInstance) {
+    window.monthlyChartInstance.destroy();
+  }
+
+  const labels = Object.keys(monthlyNewTracks).sort();
+  const data = labels.map((label) => monthlyNewTracks[label]);
+
+  window.monthlyChartInstance = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: "New Tracks per Month",
+          data: data,
+          backgroundColor: "rgba(30, 215, 96, 0.7)",
+          borderColor: "rgba(30, 215, 96, 1)",
+          borderWidth: 1,
+        },
+      ],
+    },
+    options: {
+      scales: {
+        x: { title: { display: true, text: "Month" } },
+        y: { beginAtZero: true, title: { display: true, text: "New Tracks" } },
+      },
+    },
+  });
+}
+
 // Supporting aggregation functions unchanged
+
+// All your other helper functions remain unchanged (initializeEmptyResults, mergeResults, etc.)
+
 function initializeEmptyResults() {
   return {
     top_tracks: {},
+
     top_artists: {},
+
     total_hours: 0,
+
     skip_rate: 0,
+
     skips_platform: {},
+
     skips_artist: {},
+
     repeat_tracks: 0,
+
     exploration_ratio: 0,
+
     monthly_new_tracks: {},
   };
 }
 
 function mergeResults(agg, batch) {
   agg.top_tracks = mergeCountObjects(agg.top_tracks, batch.top_tracks);
+
   agg.top_artists = mergeCountObjects(agg.top_artists, batch.top_artists);
+
   agg.total_hours += batch.total_hours;
+
   agg.skip_rate = weightedAverage(
     agg.skip_rate,
+
     agg.total_hours,
+
     batch.skip_rate,
+
     batch.total_hours
   );
+
   agg.skips_platform = mergeWeightedAverages(
     agg.skips_platform,
+
     batch.skips_platform
   );
+
   agg.skips_artist = mergeWeightedAverages(
     agg.skips_artist,
+
     batch.skips_artist
   );
+
   agg.repeat_tracks += batch.repeat_tracks;
+
   agg.exploration_ratio = (agg.exploration_ratio + batch.exploration_ratio) / 2;
+
   agg.monthly_new_tracks = mergeCountObjects(
     agg.monthly_new_tracks,
+
     batch.monthly_new_tracks
   );
+
   return agg;
 }
 
 function mergeCountObjects(a, b) {
   const result = { ...a };
+
   for (const [key, value] of Object.entries(b)) {
     result[key] = (result[key] || 0) + value;
   }
+
   return result;
 }
 
 function weightedAverage(avg1, weight1, avg2, weight2) {
   if (weight1 + weight2 === 0) return 0;
+
   return (avg1 * weight1 + avg2 * weight2) / (weight1 + weight2);
 }
 
 function mergeWeightedAverages(a, b) {
   const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+
   const result = {};
+
   keys.forEach((key) => {
     const v1 = a[key] || 0;
+
     const v2 = b[key] || 0;
+
     result[key] = (v1 + v2) / ((v1 > 0 ? 1 : 0) + (v2 > 0 ? 1 : 0) || 1);
   });
+
   return result;
 }
 
 function displayResults(data) {
   const resDiv = document.getElementById("results");
+
   const sortEntries = (obj) =>
     Object.entries(obj)
+
       .sort((a, b) => b[1] - a[1])
+
       .slice(0, 10);
 
   const topTracksSorted = sortEntries(data.top_tracks);
+
   const topArtistsSorted = sortEntries(data.top_artists);
 
   let html = "<h3>Top Tracks</h3><ul>";
+
   topTracksSorted.forEach(([track, count]) => {
     html += `<li>${track}: ${count.toFixed(2)}</li>`;
   });
+
   html += "</ul>";
 
   html += "<h3>Top Artists</h3><ul>";
+
   topArtistsSorted.forEach(([artist, count]) => {
     html += `<li>${artist}: ${count.toFixed(2)}</li>`;
   });
+
   html += "</ul>";
 
   html += `<h3>Total Listening Hours</h3><p>${data.total_hours.toFixed(2)}</p>`;
+
   html += `<h3>Skip Rate</h3><p>${(data.skip_rate * 100).toFixed(2)}%</p>`;
+
   html += `<h3>Repeat Tracks</h3><p>${data.repeat_tracks}</p>`;
+
   html += `<h3>Exploration Ratio</h3><p>${(
     data.exploration_ratio * 100
   ).toFixed(2)}%</p>`;
