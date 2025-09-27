@@ -1,8 +1,20 @@
 let jsonData = [];
 const batchSize = 1000;
-const MAX_CONCURRENT = 2; // Adjust up or down if needed
+const MAX_CONCURRENT = 2; // Number of parallel batch uploads supported
 let aggregatedResults = null;
 
+// Helper function to update progress bar and text
+function updateProgress(entriesProcessed, totalEntries) {
+  const percentage = (entriesProcessed / totalEntries) * 100;
+  document.getElementById("progressBar").style.width = percentage + "%";
+  document.getElementById(
+    "progressText"
+  ).textContent = `Processed ${entriesProcessed} of ${totalEntries} entries (${percentage.toFixed(
+    1
+  )}%)`;
+}
+
+// File input event listener: parse file(s) and load JSON data
 document.getElementById("fileInput").addEventListener("change", (e) => {
   const files = e.target.files;
   let loadedCount = 0;
@@ -39,75 +51,44 @@ async function analyze() {
   }
   document.getElementById("status").textContent = "Analyzing in parallel...";
 
-  aggregatedResults = initializeEmptyResults();
+  // Initialize progress bar at zero
+  updateProgress(0, jsonData.length);
 
+  aggregatedResults = initializeEmptyResults();
   const batches = [];
   for (let i = 0; i < jsonData.length; i += batchSize) {
     batches.push(jsonData.slice(i, i + batchSize));
   }
 
-  let processed = 0;
-  let inFlight = [];
-  let batchIndex = 0;
-
-  async function uploadBatch(batch, idx) {
-    const response = await fetch("/api/analyze", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(batch),
-    });
-    if (!response.ok) {
-      throw new Error(
-        `Error analyzing batch starting at index ${idx * batchSize}`
-      );
-    }
-    const batchResult = await response.json();
-    return batchResult;
-  }
-
-  // Helper function to control concurrency
-  async function processInParallel() {
-    let results = [];
-    while (batchIndex < batches.length || inFlight.length > 0) {
-      // Start as many as allowed
-      while (inFlight.length < MAX_CONCURRENT && batchIndex < batches.length) {
-        const current = batchIndex;
-        const promise = uploadBatch(batches[current], current).then(
-          (result) => ({ idx: current, result })
-        );
-        inFlight.push(promise);
-        batchIndex++;
-      }
-
-      // Wait for first one to finish
-      const finished = await Promise.race(inFlight);
-      results.push(finished.result);
-
-      // Remove resolved from inFlight
-      inFlight = inFlight.filter((p) => p !== finished);
-      processed += batchSize;
-      document.getElementById("status").textContent = `Processed ${Math.min(
-        processed,
-        jsonData.length
-      )} / ${jsonData.length} entries`;
-    }
-    return results;
-  }
-
-  try {
-    const allResults = await processInParallel();
-    allResults.forEach((batchResult) => {
+  let completed = 0;
+  // Process batches in groups of MAX_CONCURRENT
+  for (let i = 0; i < batches.length; i += MAX_CONCURRENT) {
+    const currentBatches = batches.slice(i, i + MAX_CONCURRENT);
+    const promises = currentBatches.map((batch, idx) =>
+      fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(batch),
+      }).then((response) => {
+        if (!response.ok) throw new Error(`Error in batch ${i + idx + 1}`);
+        return response.json();
+      })
+    );
+    const results = await Promise.all(promises);
+    results.forEach((batchResult) => {
       aggregatedResults = mergeResults(aggregatedResults, batchResult);
     });
-    document.getElementById("status").textContent = "Analysis complete.";
-    displayResults(aggregatedResults);
-    drawChart(aggregatedResults.monthly_new_tracks);
-  } catch (err) {
-    document.getElementById("status").textContent = err.message;
-  }
-}
 
-// ... keep initializeEmptyResults, mergeResults, mergeCountObjects, weightedAverage, mergeWeightedAverages, displayResults as before ...
+    completed += currentBatches.length * batchSize;
+    if (completed > jsonData.length) completed = jsonData.length;
+    // Update progress bar and text after each group of parallel batches completes
+    updateProgress(completed, jsonData.length);
+  }
+
+  document.getElementById("status").textContent = "Analysis complete.";
+  displayResults(aggregatedResults);
+  drawChart(aggregatedResults.monthly_new_tracks);
+}
 
 function initializeEmptyResults() {
   return {
