@@ -10,7 +10,7 @@ function updateProgress(entriesProcessed, totalEntries) {
   const percentage = (entriesProcessed / totalEntries) * 100;
   document.getElementById("progressBar").style.width = percentage + "%";
   document.getElementById(
-    "progressText"
+    "batchProgressText"
   ).textContent = `Processed ${entriesProcessed} of ${totalEntries} entries (${percentage.toFixed(
     1
   )}%)`;
@@ -53,7 +53,7 @@ function startLiveTimer() {
     const elapsedMs = Date.now() - startTime;
     const elapsedSeconds = (elapsedMs / 1000).toFixed(1);
     document.getElementById(
-      "progressText"
+      "timerText"
     ).textContent = `Time elapsed: ${elapsedSeconds} seconds`;
   }, 1000);
 }
@@ -72,7 +72,7 @@ async function analyze() {
   }
   document.getElementById("status").textContent = "Analyzing in parallel...";
 
-  // Initialize progress bar at zero
+  // Initialize progress bar at zero and start timer
   updateProgress(0, jsonData.length);
   startLiveTimer();
 
@@ -84,7 +84,6 @@ async function analyze() {
 
   let completed = 0;
   // Process batches in groups of MAX_CONCURRENT
-
   for (let i = 0; i < batches.length; i += MAX_CONCURRENT) {
     const currentBatches = batches.slice(i, i + MAX_CONCURRENT);
     const promises = currentBatches.map((batch, idx) =>
@@ -104,23 +103,21 @@ async function analyze() {
 
     completed += currentBatches.length * batchSize;
     if (completed > jsonData.length) completed = jsonData.length;
-    // Update progress bar and text after each group of parallel batches completes
     updateProgress(completed, jsonData.length);
   }
 
-  document.getElementById("status").textContent = "Analysis complete.";
-  displayResults(aggregatedResults);
-
   stopLiveTimer();
 
-  // Show final total
+  document.getElementById("status").textContent = "Analysis complete.";
+
+  // Show final total time
   const elapsedMs = Date.now() - startTime;
   const elapsedSeconds = (elapsedMs / 1000).toFixed(1);
   document.getElementById(
-    "progressText"
+    "timerText"
   ).textContent = `Total time: ${elapsedSeconds} seconds`;
 
-  const resDiv = document.getElementById("results");
+  displayResults(aggregatedResults);
   drawChart(aggregatedResults.monthly_new_tracks);
 }
 
@@ -231,6 +228,4 @@ function displayResults(data) {
   html += `<h3>Exploration Ratio</h3><p>${(
     data.exploration_ratio * 100
   ).toFixed(2)}%</p>`;
-
-  resDiv.innerHTML = html;
 }
