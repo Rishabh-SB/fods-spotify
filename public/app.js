@@ -1,6 +1,6 @@
 let jsonData = [];
-const batchSize = 100;
-const MAX_CONCURRENT = 100; // Number of parallel batch uploads supported
+const batchSize = 10000;
+const MAX_CONCURRENT = 1; // Number of parallel batch uploads supported
 let aggregatedResults = null;
 let timerInterval = null;
 let startTime = null;
