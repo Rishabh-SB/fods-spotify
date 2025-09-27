@@ -201,3 +201,98 @@ function displayResults(data) {
 
   resDiv.innerHTML = html;
 }
+
+// Benchmark function as previously discussed
+async function benchmarkBatchConcurrency(jsonData, batchSizes, concurrencies) {
+  const results = [];
+
+  for (const batchSize of batchSizes) {
+    for (const concurrency of concurrencies) {
+      const aggregatedResults = initializeEmptyResults();
+      const batches = [];
+      for (let i = 0; i < jsonData.length; i += batchSize) {
+        batches.push(jsonData.slice(i, i + batchSize));
+      }
+
+      const startTime = Date.now();
+      for (let i = 0; i < batches.length; i += concurrency) {
+        const currentBatches = batches.slice(i, i + concurrency);
+        const promises = currentBatches.map((batch) =>
+          fetch("/api/analyze", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(batch),
+          }).then((res) => {
+            if (!res.ok) throw new Error("Batch failed");
+            return res.json();
+          })
+        );
+        try {
+          const batchResults = await Promise.all(promises);
+          batchResults.forEach((batchResult) => {
+            mergeResults(aggregatedResults, batchResult);
+          });
+        } catch (err) {
+          results.push({
+            batchSize,
+            concurrency,
+            error: err.message,
+          });
+          break;
+        }
+      }
+      const elapsedSeconds = (Date.now() - startTime) / 1000;
+      const throughput = jsonData.length / elapsedSeconds;
+      results.push({
+        batchSize,
+        concurrency,
+        elapsedSeconds: elapsedSeconds.toFixed(2),
+        throughput: throughput.toFixed(0),
+        error: null,
+      });
+    }
+  }
+
+  return results;
+}
+
+// On page load or script load, add event listener to benchmark button
+document
+  .getElementById("benchmarkButton")
+  .addEventListener("click", async () => {
+    if (jsonData.length === 0) {
+      alert("No data loaded! Please upload files first.");
+      return;
+    }
+    document.getElementById("benchmarkResults").textContent =
+      "Running benchmark...\nThis may take several minutes depending on data size.";
+
+    const batchSizes = [1000, 2500, 5000, 10000]; // example batch sizes to test
+    const concurrencies = [1, 2, 4, 8]; // example concurrency levels
+
+    try {
+      const results = await benchmarkBatchConcurrency(
+        jsonData,
+        batchSizes,
+        concurrencies
+      );
+      let output =
+        "BatchSize | Concurrency | Time(s) | Throughput (entries/sec) | Error\n";
+      output +=
+        "---------------------------------------------------------------\n";
+      results.forEach((r) => {
+        output += `${r.batchSize.toString().padStart(9)} | ${r.concurrency
+          .toString()
+          .padStart(11)} | ${r.elapsedSeconds
+          .toString()
+          .padStart(7)} | ${r.throughput.toString().padStart(25)} | ${
+          r.error || ""
+        }\n`;
+      });
+      document.getElementById("benchmarkResults").textContent = output;
+    } catch (err) {
+      document.getElementById(
+        "benchmarkResults"
+      ).textContent = `Benchmark failed: ${err.message}`;
+    }
+  });

@@ -28,6 +28,12 @@
     <h1>Spotify Listening History Analyzer</h1>
     <input type="file" id="fileInput" accept=".json" multiple />
     <button onclick="analyze()">Analyze</button>
+    <button id="benchmarkButton">Benchmark Configurations</button>
+    <div
+      id="benchmarkResults"
+      style="white-space: pre-wrap; margin-top: 10px; font-family: monospace"
+    ></div>
+
     <div id="status"></div>
     <div
       id="progressContainer"
