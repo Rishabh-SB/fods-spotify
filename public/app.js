@@ -1,5 +1,6 @@
 let jsonData = [];
 const batchSize = 1000;
+const MAX_CONCURRENT = 4; // Adjust up or down if needed
 let aggregatedResults = null;
 
 document.getElementById("fileInput").addEventListener("change", (e) => {
@@ -36,37 +37,77 @@ async function analyze() {
     alert("No data loaded!");
     return;
   }
-  document.getElementById("status").textContent = "Analyzing in batches...";
+  document.getElementById("status").textContent = "Analyzing in parallel...";
 
   aggregatedResults = initializeEmptyResults();
 
+  const batches = [];
   for (let i = 0; i < jsonData.length; i += batchSize) {
-    const batch = jsonData.slice(i, i + batchSize);
+    batches.push(jsonData.slice(i, i + batchSize));
+  }
+
+  let processed = 0;
+  let inFlight = [];
+  let batchIndex = 0;
+
+  async function uploadBatch(batch, idx) {
     const response = await fetch("/api/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(batch),
     });
-
     if (!response.ok) {
-      document.getElementById(
-        "status"
-      ).textContent = `Error analyzing batch starting at index ${i}`;
-      return;
+      throw new Error(
+        `Error analyzing batch starting at index ${idx * batchSize}`
+      );
     }
-
     const batchResult = await response.json();
-    aggregatedResults = mergeResults(aggregatedResults, batchResult);
-    document.getElementById("status").textContent = `Processed ${Math.min(
-      i + batchSize,
-      jsonData.length
-    )} / ${jsonData.length} entries`;
+    return batchResult;
   }
 
-  document.getElementById("status").textContent = "Analysis complete.";
-  displayResults(aggregatedResults);
-  drawChart(aggregatedResults.monthly_new_tracks);
+  // Helper function to control concurrency
+  async function processInParallel() {
+    let results = [];
+    while (batchIndex < batches.length || inFlight.length > 0) {
+      // Start as many as allowed
+      while (inFlight.length < MAX_CONCURRENT && batchIndex < batches.length) {
+        const current = batchIndex;
+        const promise = uploadBatch(batches[current], current).then(
+          (result) => ({ idx: current, result })
+        );
+        inFlight.push(promise);
+        batchIndex++;
+      }
+
+      // Wait for first one to finish
+      const finished = await Promise.race(inFlight);
+      results.push(finished.result);
+
+      // Remove resolved from inFlight
+      inFlight = inFlight.filter((p) => p !== finished);
+      processed += batchSize;
+      document.getElementById("status").textContent = `Processed ${Math.min(
+        processed,
+        jsonData.length
+      )} / ${jsonData.length} entries`;
+    }
+    return results;
+  }
+
+  try {
+    const allResults = await processInParallel();
+    allResults.forEach((batchResult) => {
+      aggregatedResults = mergeResults(aggregatedResults, batchResult);
+    });
+    document.getElementById("status").textContent = "Analysis complete.";
+    displayResults(aggregatedResults);
+    drawChart(aggregatedResults.monthly_new_tracks);
+  } catch (err) {
+    document.getElementById("status").textContent = err.message;
+  }
 }
+
+// ... keep initializeEmptyResults, mergeResults, mergeCountObjects, weightedAverage, mergeWeightedAverages, displayResults as before ...
 
 function initializeEmptyResults() {
   return {
