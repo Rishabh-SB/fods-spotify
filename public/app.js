@@ -309,7 +309,7 @@ document
       "Running benchmark...\nThis may take several minutes depending on data size.";
 
     const batchSizes = [4000, 5000, 6000, 7000]; // example batch sizes to test
-    const concurrencies = [5, 10, 20, 30]; // example concurrency levels
+    const concurrencies = [5, 10, 15, 20]; // example concurrency levels
 
     try {
       await benchmarkBatchConcurrency(jsonData, batchSizes, concurrencies);
