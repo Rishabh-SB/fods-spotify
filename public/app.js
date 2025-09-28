@@ -297,3 +297,26 @@ async function benchmarkBatchConcurrency(jsonData, batchSizes, concurrencies) {
 
   return results;
 }
+
+document
+  .getElementById("benchmarkButton")
+  .addEventListener("click", async () => {
+    if (jsonData.length === 0) {
+      alert("No data loaded! Please upload files first.");
+      return;
+    }
+    document.getElementById("benchmarkResults").textContent =
+      "Running benchmark...\nThis may take several minutes depending on data size.";
+
+    const batchSizes = [1000, 2500, 5000, 10000]; // example batch sizes to test
+    const concurrencies = [1, 2, 4, 8]; // example concurrency levels
+
+    try {
+      await benchmarkBatchConcurrency(jsonData, batchSizes, concurrencies);
+      // Results table will be auto updated in #benchmarkResults
+    } catch (err) {
+      document.getElementById(
+        "benchmarkResults"
+      ).textContent = `Benchmark failed: ${err.message}`;
+    }
+  });
